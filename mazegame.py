@@ -1,10 +1,28 @@
-import sys
+import pathlib
+import os
 import random
 import png
 import time as t
 import heapq
 
-DIRECTIONS = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+
+DIRECTIONS = [(1, 0), (0, 1), (-1, 0), (0, -1)] # West North East South
+
+def load_view_strings() -> dict:
+    views_strings = {}
+    p = pathlib.Path("views/")
+    for filepath in p.iterdir():
+        with open(filepath, "r") as file:
+            view = ""
+            for i, line in enumerate(file):
+                if i == 0:
+                    view_name = line.strip()
+                else:
+                    view += line
+        views_strings[view_name] = view
+    return views_strings
+
+VIEW_STRINGS = load_view_strings()
 
 class Maze():
     def __init__(self, width, height, walls):
@@ -28,8 +46,65 @@ class Maze():
         for row in string_map:
             rows.append("".join(row))
         return "\n".join(rows)
+    
+    def calculate_view(self, player_position, player_direction):
+        #looks forward
+        cells_away = 0
+        wall_ahead = False
+        distance_wall_map = {}
+        while cells_away <= 4 and not wall_ahead:
+            current_cell = tuple(player_position[x] + cells_away * player_direction[x] for x in [0,1])
+            walls = []
+            #Check forward
+            if player_direction in self.walls[current_cell]:
+                wall_ahead = True
+            #Check left
+            if DIRECTIONS[DIRECTIONS.index(player_direction) - 1] in self.walls[current_cell]:
+                walls.append("L")
+            #Check right
+            if DIRECTIONS[DIRECTIONS.index(player_direction) - 3] in self.walls[current_cell]:
+                walls.append("R")  
+            distance_wall_map[cells_away] = walls
+            cells_away += 1
+
+        closest_wall = cells_away - 1
+        render_strings = ["base"]
+        if closest_wall < 4:
+            render_strings.append(f"wall{closest_wall}")
+
+        for i in range(min(closest_wall + 1, 4)):
+            if "L" not in distance_wall_map[i]:
+                render_strings.append(f"open{i}l")
+            if "R" not in distance_wall_map[i]:
+                render_strings.append(f"open{i}r")
         
- 
+        view = ""
+        for string in render_strings:
+            if not view:
+                view = VIEW_STRINGS[string]
+            else:
+                view = overlay_strings(view, VIEW_STRINGS[string])
+
+        return view
+
+    def okay_to_move_forward(self, player_position, player_direction):
+        return not player_direction in self.walls[player_position]
+        
+
+def overlay_strings(base, overlay):
+    if len(base) != len(overlay):
+        raise ValueError
+    combined_string = ""
+    for i in range(len(base)):
+        if overlay[i] == "x":#Clear character
+            combined_string += " "
+        elif overlay[i] == " ":
+            combined_string += base[i]
+        else:
+            combined_string += overlay[i]
+    
+    return combined_string
+                    
 class Stack():
     def __init__(self):
         self.queue = []
@@ -113,6 +188,7 @@ def print_out_to_png(print_out, path = None):
         png_list.append(png_row)
     png.from_array(png_list, "RGB").save("maze.png")
 
+
 ### PATHFINDING
 class Priority_Queue:
     def __init__(self) -> None:
@@ -169,6 +245,29 @@ def a_star_pathfinding(walls, start, end):
     return path
 
 if __name__ == "__main__":
-    m = Maze(200, 200, make_maze(200, 200))
-    path = a_star_pathfinding(m.walls, (199, 0), (0, 199))
+    print("welcome to the maze")
+    width = int(input("maze width? "))
+    height = int(input("maze height? "))
+    m = Maze(width, height, make_maze(width, height))
+    path = a_star_pathfinding(m.walls, (0, 0), (width - 1, height - 1))
     print_out_to_png(m.print_out(), path)
+    player_position = (0, 0)
+    player_direction = (1, 0)
+    print(m.calculate_view(player_position, player_direction))
+    print(f"goal: ({width - 1}, {height - 1})")
+    while True:
+        if player_position == (width - 1, height  - 1):
+            print("You win") 
+        print(f"position: {player_position}")
+        word_direction = ["east", "south", "west", "north"][DIRECTIONS.index(player_direction)]
+        print(f"facing {word_direction}")
+        move = input("")
+        os.system("cls")
+        if move == "w" and m.okay_to_move_forward(player_position, player_direction):
+            new_pos = tuple(player_position[i] + player_direction[i] for i in [0, 1])
+            player_position = new_pos
+        if move == "a":
+            player_direction = DIRECTIONS[DIRECTIONS.index(player_direction) - 1]
+        if move == "d":
+            player_direction = DIRECTIONS[DIRECTIONS.index(player_direction) - 3]
+        print(m.calculate_view(player_position, player_direction))
